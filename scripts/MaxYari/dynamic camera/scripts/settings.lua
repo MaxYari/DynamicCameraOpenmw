@@ -36,6 +36,23 @@ I.Settings.registerGroup {
                 type = "trigger",
                 key = "LockTarget"
             }
+        },
+        {
+            key = "LockTargetDistance",
+            renderer = "number",
+            default = 15,
+            argument = {
+                min = 1
+            },
+            name = "Lock Target Distance",
+            description = "In meters. How far a target can be to get locked onto. A locked target is released a bit beyond it."
+        },
+        {
+            key = "LockTargetSwitching",
+            renderer = "checkbox",
+            default = true,
+            name = "Switch Target By Look Movement",
+            description = "While locked, a quick mouse or stick movement switches to another target in that direction."
         }
     }
 }
@@ -195,6 +212,47 @@ I.Settings.registerGroup {
 
 
 
+
+-- Only does something with ReAnimation's FBA Compatibility folder loaded; the status line (rendered by
+-- scripts/menu.lua) says whether it is.
+I.Settings.registerGroup {
+    key = '5FPViewDynamicsFBASettings',
+    page = 'FPViewDynamicsPage',
+    l10n = 'FPViewDynamics',
+    name = 'Full Body Awareness Tweaks',
+    description = "For OpenMW Full Body Awareness with ReAnimation's FBA Compatibility folder, where your body is visible in first person.",
+    permanentStorage = true,
+    settings = {
+        {
+            key = "FBAStatus",
+            renderer = "DynamicCameraFBAStatus",
+            default = "",
+            name = "ReAnimation FBA Compatibility",
+            description = "Found when ReAnimation_FBA_Compatibility.txt is in a loaded data folder."
+        },
+        {
+            key = "LimitViewTiltMelee",
+            renderer = "checkbox",
+            default = true,
+            name = "Limit Viewmodel Down Tilt: Melee",
+            description = "Looking down, the hands ease to a stop at about 50 degrees while the camera keeps going, so they don't sink into the body. For melee weapons, fists and spells."
+        },
+        {
+            key = "LimitViewTiltMarksman",
+            renderer = "checkbox",
+            default = false,
+            name = "Limit Viewmodel Down Tilt: Marksman",
+            description = "The same for bows, crossbows and throwing weapons. Off by default: shots follow the hands, so with the limit you can't shoot steeply down."
+        },
+        {
+            key = "AdjustCameraLookingDown",
+            renderer = "checkbox",
+            default = true,
+            name = "Adjust Camera Position When Looking Down",
+            description = "Looking down, the camera eases forward (10 units by 85 degrees, starting at 20) so it clears the chest instead of looking into the armor's neck opening. Level view is untouched."
+        }
+    },
+}
 
 return {
     HighSpeedEffectsOpts = HighSpeedEffectsOpts

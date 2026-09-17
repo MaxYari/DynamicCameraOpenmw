@@ -1,3 +1,6 @@
+-- Mod version, published to Nexus by .github/workflows/nexus-release.yml (the first `version = ...` in this file)
+local VERSION = "2.6"
+
 local mp = "scripts/MaxYari/dynamic camera/"
 local sp = "scripts\\MaxYari\\dynamic camera\\sounds\\"
 
@@ -14,6 +17,13 @@ local debug = require("openmw.debug")
 local input = require("openmw.input")
 local async = require("openmw.async")
 local ui = require("openmw.ui")
+local vfs = require("openmw.vfs")
+
+-- Max Yari's Script Services (MSS) is a required dependency: checked once, when this script loads.
+if not core.contentFiles.has("MaxYariScriptServices.omwscripts") then
+    print("[Dynamic Camera] ERROR: critical dependency is missing: Max Yari's Script Services (MSS). Please install it.")
+    ui.showMessage("Dynamic Camera: Critical dependency is missing, please install Max Yari's Script Services (MSS)")
+end
 
 
 local settings = require(mp .. "scripts/settings")
@@ -27,7 +37,8 @@ local iMaxActivateDist = core.getGMST("iMaxActivateDist")
 local selfActor = gutils.Actor:new(omwself)
 
 local lastTargetSwitchTime = 0
-local maxTargetDistance = 15 * 69
+local maxTargetDistance = 15 * DEFS.GUtoM
+local targetSwitchingEnabled = true
 local targetSwitchCooldown = 0.3
 local targetSwitchMouseVel = 3.5
 
@@ -43,6 +54,12 @@ local soundSettings = storage.playerSection('3FPViewDynamicsSoundSettings')
 local visualSettings = storage.playerSection('2FPViewDynamicsVisualSettings')
 local visualExtraSettings = storage.playerSection('4FPViewDynamicsVisualExtraSettings')
 local controlsSettings = storage.playerSection('1FPViewDynamicsControlsSettings')
+local function readLockSettings()
+    maxTargetDistance = (controlsSettings:get("LockTargetDistance") or 15) * DEFS.GUtoM
+    targetSwitchingEnabled = controlsSettings:get("LockTargetSwitching") ~= false
+end
+readLockSettings()
+controlsSettings:subscribe(async:callback(readLockSettings))
 local SpeedWindVolume = get100Setting(soundSettings, "SpeedWindVolume")
 
 local ViewmodelIntertiaStrength = get100Setting(visualSettings, "ViewmodelIntertiaStrength")
@@ -55,6 +72,26 @@ local SneakVignetteOpacity = get100Setting(visualSettings, "SneakVignetteOpacity
 local BlackBarsRatio = visualExtraSettings:get("BlackBarsRatio")
 local StrafeRollStrength = get100Setting(visualExtraSettings, "StrafeRollStrength")
 local LookAroundRollStrength = get100Setting(visualExtraSettings, "LookAroundRollStrength")
+
+-- Full Body Awareness tweaks, for a body visible in first person. Only with ReAnimation's FBA
+-- Compatibility folder loaded, found by its marker file.
+local FbaDetected = vfs.fileExists("ReAnimation_FBA_Compatibility.txt")
+local FbaViewmodelMaxDownPitch = math.rad(50)
+local ViewmodelDownTiltSoftness = math.rad(15)
+-- Look-down camera adjustment: forward/up offset in game units, eased in between the two pitches.
+local LookDownOffset = util.vector3(0, 10, 0)
+local LookDownOffsetStart = math.rad(20)
+local LookDownOffsetFull = math.rad(85)
+local fbaSettings = storage.playerSection('5FPViewDynamicsFBASettings')
+local LimitViewTiltMelee, LimitViewTiltMarksman, AdjustCameraLookingDown
+local function readFbaSettings()
+    LimitViewTiltMelee = fbaSettings:get("LimitViewTiltMelee")
+    LimitViewTiltMarksman = fbaSettings:get("LimitViewTiltMarksman")
+    AdjustCameraLookingDown = fbaSettings:get("AdjustCameraLookingDown")
+end
+readFbaSettings()
+fbaSettings:subscribe(async:callback(readFbaSettings))
+
 visualSettings:subscribe(async:callback(function(val)
     ViewmodelIntertiaStrength = get100Setting(visualSettings, "ViewmodelIntertiaStrength")
     HighSpeedEffects = visualSettings:get("HighSpeedEffects")
@@ -91,6 +128,68 @@ local blackBarsShader = shaderUtils.ShaderWrapper:new("blackBarsProgrammable", {
 local extraPitchMods = {}
 local extraYawMods = {}
 local extraRollMods = {}
+-- Lowest down-pitch the view model may reach, from other mods (mod-id keyed), on top of the setting.
+local viewModelPitchLimitMods = {}
+
+local MARKSMAN_WEAPON_TYPES = {
+    [types.Weapon.TYPE.MarksmanBow] = true,
+    [types.Weapon.TYPE.MarksmanCrossbow] = true,
+    [types.Weapon.TYPE.MarksmanThrown] = true,
+}
+
+-- Whether a marksman weapon is out, for the FBA tilt settings: the stance, and the weapon's record
+-- through MSS (read at most every 0.1 s, shared with other mods).
+local function isMarksmanOut()
+    if types.Actor.getStance(omwself) ~= types.Actor.STANCE.Weapon then return false end
+    local info = I.MSS.getEquipmentInfo(types.Actor.EQUIPMENT_SLOT.CarriedRight, 0.1)
+    return info ~= nil and info.type == types.Weapon and MARKSMAN_WEAPON_TYPES[info.record.type] == true
+end
+
+local function viewModelMaxPitch()
+    local limit = math.rad(90)
+    if FbaDetected and (LimitViewTiltMelee or LimitViewTiltMarksman) then
+        local limited = LimitViewTiltMelee
+        -- Which weapon is out only matters when the two settings differ.
+        if LimitViewTiltMelee ~= LimitViewTiltMarksman and isMarksmanOut() then
+            limited = LimitViewTiltMarksman
+        end
+        if limited then limit = FbaViewmodelMaxDownPitch end
+    end
+    for _, value in pairs(viewModelPitchLimitMods) do
+        limit = math.min(limit, value)
+    end
+    return limit
+end
+
+-- The view model's pitch for a camera pitch: 1:1 until the softness zone below the limit, then
+-- following less and less and easing into the limit (tanh keeps the slope continuous at the knee).
+-- A limit of 90 degrees is off.
+local function limitViewModelPitch(pitch)
+    local limit = viewModelMaxPitch()
+    if limit >= math.rad(89.9) then return pitch end
+    local soft = ViewmodelDownTiltSoftness
+    if soft <= 0 then return math.min(pitch, limit) end
+    local knee = limit - soft
+    if pitch <= knee then return pitch end
+    local x = 2 * (pitch - knee) / soft
+    return knee + soft * (1 - 2 / (math.exp(x) + 1))
+end
+
+-- Eases the first-person camera forward as the view pitches down, so with a visible body it clears
+-- the chest instead of looking into the armor's neck opening. Zero at level view, so aiming is
+-- untouched, and no camera calls are made until the view passes the start pitch. Added onto the
+-- offset the built-in camera script zeroes each update (its onUpdate runs before ours) and head
+-- bobbing adds to in onFrame.
+-- viewPitch is our own cameraPitch, not camera.getPitch(): past the view model limit the engine snaps
+-- the camera back to the clamped body pitch whenever the body rotates, so that reading flickers
+-- between the two frame to frame.
+local function applyLookDownOffset(viewPitch)
+    if not (FbaDetected and AdjustCameraLookingDown) then return end
+    local s = util.clamp((viewPitch - LookDownOffsetStart) / (LookDownOffsetFull - LookDownOffsetStart), 0, 1)
+    if s <= 0 then return end
+    s = s * s * (3 - 2 * s)
+    camera.setFirstPersonOffset(camera.getFirstPersonOffset() + LookDownOffset * s)
+end
 
 -- Helper function to sum and apply all extra camera values from all mods
 local function applySummedExtras()
@@ -129,6 +228,12 @@ local function setExtraRoll(value, modId)
     extraRollMods[modId] = value
 end
 
+-- Radians, positive is down; nil clears this mod's limit.
+local function setViewModelPitchLimit(value, modId)
+    if not modId then error("setViewModelPitchLimit: modId is required") end
+    viewModelPitchLimitMods[modId] = value
+end
+
 -- Interface
 local interface = {
     version = 1.25,
@@ -137,7 +242,8 @@ local interface = {
     camSpeedMult = 1.0,
     setExtraPitch = setExtraPitch,
     setExtraYaw = setExtraYaw,
-    setExtraRoll = setExtraRoll
+    setExtraRoll = setExtraRoll,
+    setViewModelPitchLimit = setViewModelPitchLimit
 }
 
 -- TO DO: Later - maybe make targeting height adjustable?
@@ -345,7 +451,7 @@ local function updateTargetLock(mouseVelocity, currentTarget, dt)
 
     if currentTarget then
         -- Handle target switching
-        if mouseDirection and now - lastTargetSwitchTime > targetSwitchCooldown then
+        if targetSwitchingEnabled and mouseDirection and now - lastTargetSwitchTime > targetSwitchCooldown then
             local newTarget = findBestTarget(mouseDirection, currentTarget)
             if newTarget then
                 updatedTarget = newTarget
@@ -480,20 +586,50 @@ local function startBobAnimation(bobStrengthMult, durationMult)
     end)
 end
 
+local DownedAnims = { "knockdown", "knockout", "swimknockdown", "swimknockout" }
+local function isDowned()
+    for _, groupname in ipairs(DownedAnims) do
+        if animation.isPlaying(omwself, groupname) then return true end
+    end
+    return false
+end
+
+-- Camera spin fix, by foxunder: the rotation deltas we write into controls are ignored if still
+-- there next frame (not overwritten by input), the view model deltas are normalized across the
+-- -pi/pi wrap and capped, and pitch stays just short of straight up/down.
+local lastWrittenYawChange = nil
+local lastWrittenPitchChange = nil
+local MaxModelDelta = 1.0
+local MaxCameraPitch = 1.55
+
+local function releaseCameraControl()
+    lastWrittenYawChange = nil
+    lastWrittenPitchChange = nil
+    if #cameraVelSampler.values > 0 then
+        cameraVelSampler.values = {}
+        cameraVelSampler.mean = 0
+    end
+end
+
 local function onFrame(dt)
     if dt <= 0 then return end        
 
     -- Calculate new camera yaw and pitch
-    local mouseDeltaYaw = omwself.controls.yawChange * interface.camSpeedMult
-    local mouseDeltaPitch = omwself.controls.pitchChange * interface.camSpeedMult
+    local rawYawChange = omwself.controls.yawChange
+    local rawPitchChange = omwself.controls.pitchChange
+    if lastWrittenYawChange and rawYawChange == lastWrittenYawChange then rawYawChange = 0 end
+    if lastWrittenPitchChange and rawPitchChange == lastWrittenPitchChange then rawPitchChange = 0 end
+
+    local mouseDeltaYaw = rawYawChange * interface.camSpeedMult
+    local mouseDeltaPitch = rawPitchChange * interface.camSpeedMult
 
     local newCameraYaw = cameraYaw + mouseDeltaYaw
-    local newCameraPitch = util.clamp(cameraPitch + mouseDeltaPitch, -1.57, 1.57)
+    local newCameraPitch = util.clamp(cameraPitch + mouseDeltaPitch, -MaxCameraPitch, MaxCameraPitch)
 
     local camVelocity = (newCameraYaw - cameraYaw) / dt / 100
     local mouseVelocity = util.vector2(mouseDeltaYaw, mouseDeltaPitch) / prevDt
 
-    if not isInUI and not next(badAnimations) then
+    if not isInUI and not next(badAnimations) and not isDowned() then
         -- Camera lock ----------------------------------------
         -------------------------------------------------------
         CamLockTarget = updateTargetLock(mouseVelocity, CamLockTarget, dt)
@@ -557,8 +693,13 @@ local function onFrame(dt)
             local newViewModelYaw = cameraYaw - cameraVelSampler.mean * ViewmodelIntertiaStrength
 
             -- View model yaw can only be set by providing a delta value, so calculating such
-            local deltaModelYaw = newViewModelYaw - omwself.rotation:getYaw()
-            local deltaModelPitch = newCameraPitch - omwself.rotation:getPitch()
+            local deltaModelYaw = util.normalizeAngle(newViewModelYaw - omwself.rotation:getYaw())
+            -- Past the max down tilt the view model, and with it the hands, stops while the camera goes on.
+            local modelPitch = newCameraPitch
+            if isFirstPerson then modelPitch = limitViewModelPitch(modelPitch) end
+            local deltaModelPitch = util.normalizeAngle(modelPitch - omwself.rotation:getPitch())
+            deltaModelYaw = util.clamp(deltaModelYaw, -MaxModelDelta, MaxModelDelta)
+            deltaModelPitch = util.clamp(deltaModelPitch, -MaxModelDelta, MaxModelDelta)
 
             if isFirstPerson then
                 omwself.controls.yawChange = deltaModelYaw
@@ -567,25 +708,39 @@ local function onFrame(dt)
                 omwself.controls.yawChange = deltaModelYaw * 20 * dt
                 omwself.controls.pitchChange = deltaModelPitch * 20 * dt
             end
+
+            lastWrittenYawChange = omwself.controls.yawChange
+            lastWrittenPitchChange = omwself.controls.pitchChange
         else
             -- We are not controlling camera, but still better save curent cam rotation
             cameraPitch = camera.getPitch()
             cameraYaw = camera.getYaw()
+            lastWrittenYawChange = nil
+            lastWrittenPitchChange = nil
         end
     else
         -- We are not controlling camera, but still better save curent cam rotation
         cameraPitch = camera.getPitch()
         cameraYaw = camera.getYaw()
+        releaseCameraControl()
     end
 
     _CamVelocity = camVelocity
 end
 
-local function onUpdate(dt)
-    if dt <= 0 then return end    
+-- Paralysis through MSS: one cached effect read per frame, shared with other mods.
+local function paralysisActive()
+    if debug.isGodMode() then return false end
+    local magnitude = I.MSS.getActiveEffect(core.magic.EFFECT_TYPE.Paralyze)
+    return magnitude ~= nil and magnitude > 0
+end
 
-    local cell = omwself.cell
-    local currentPosition = omwself.position
+local function onUpdate(dt)
+    if dt <= 0 then return end
+    applyLookDownOffset(cameraPitch)
+
+    local cell = I.MSS.getCell()
+    local currentPosition = I.MSS.getPosition()
     local deltaPos = currentPosition - lastPosition
     local wasTeleported = deltaPos:length() >= 1000 or
         (cell ~= prevCell and not (cell.isExterior and prevCell.isExterior)) -- possibly also with cell change?
@@ -597,7 +752,7 @@ local function onUpdate(dt)
     if not wasTeleported then velSampler:sample(velocity:length()) end
 
     -- Check if paralyzed
-    if selfActor:isParalyzed() then
+    if paralysisActive() then
         if not isParalyzed then
             isParalyzed = true
             savedParalysedRotation.pitch = omwself.rotation:getPitch()
@@ -675,13 +830,13 @@ local function onUpdate(dt)
 
     -- Jump camera animation -----------------------------------------------------
     ------------------------------------------------------------------------------
-    if selfActor.isOnGround() ~= lastOnGround then
+    if selfActor:isOnGround() ~= lastOnGround then
         -- Just jumped or just landed
         shouldBlendJumpAnim = currentDeltaPitch ~= 0
         local bobDurationMult = 1
         local bobStrengthMult = 1
 
-        if selfActor.isOnGround() then
+        if selfActor:isOnGround() then
             -- We have landed
             local velScale = 1
             local minVel = 400
@@ -702,7 +857,7 @@ local function onUpdate(dt)
             startBobAnimation(bobStrengthMult, bobDurationMult)
         end
     end
-    lastOnGround = selfActor.isOnGround()
+    lastOnGround = selfActor:isOnGround()
 
     if bobTweener then
         bobTweener:tick(dt)
@@ -753,12 +908,8 @@ end)
 -- Start playing cell transition animation when attempt to open a door is detected,
 -- If we use on activate event in global script itself - it will arrive in player script too late.
 input.registerTriggerHandler("Activate", async:callback(function(val)
-    local lookDir = camera.viewportToWorldVector(CenterVector)
-    local camPos = camera.getPosition()
-    local camDist = camera.getThirdPersonDistance()
-    local activationDist = camDist + iMaxActivateDist
-    local castRes = nearby.castRenderingRay(camPos, camPos + lookDir * activationDist,
-        { ignore = omwself, collisionType = nearby.COLLISION_TYPE.Door })
+    -- The object the player faces for activation, through MSS (shared with other mods).
+    local castRes = I.MSS.getInteractionTarget()
 
     if castRes.hitObject and castRes.hitObject.type == types.Door and types.Door.isTeleport(castRes.hitObject) and selfActor:canOpenDoor(castRes.hitObject) then
         hexDofShader.tweener = Tweener:new()

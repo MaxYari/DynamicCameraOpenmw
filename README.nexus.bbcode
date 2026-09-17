@@ -1,0 +1,98 @@
+[size=6][b]✩ Dynamic Camera[/b][/size]
+
+[url=https://www.youtube.com/watch?v=UHV4UTi0Kd4][img]https://img.youtube.com/vi/UHV4UTi0Kd4/maxresdefault.jpg[/img][/url]
+
+Subtle dynamic camera and first-person viewmodel (hands) inertia for OpenMW. More natural movement and jumping.
+
+Target lock with shader effects (bokeh) and a sneak shader (vignette). Immersive cell transition effects (bokeh). Experimental strafe camera tilt effects (disabled by default). Highly customizable.
+
+Meant to be used with the [url=https://www.nexusmods.com/morrowind/mods/56584]Dynamic Reticle[/url] mod, but will work without it.
+
+[i]1st-person animations in the video are from [url=https://www.nexusmods.com/morrowind/mods/52596]ReAnimation v2[/url] and MCAR. Circular reticle, HP widget, sneak reticle and hit markers are from [url=https://www.nexusmods.com/morrowind/mods/56584]Dynamic Reticle[/url].[/i]
+
+[size=5][b]✩ Features[/b][/size]
+
+[list]
+[*]Slight headbob when jumping and landing.
+[*]Viewmodel inertia when looking around.
+[*]Visual and sound effects when moving at high speeds (mainly to enhance the feel of big, long leaps).
+[*]Target lock (set the key bind in the script settings) with a neat DOF bokeh shader active only during the lock. Lock distance and switching targets by moving the mouse/stick are adjustable.
+[*]Immersive bokeh/darkening animated transition when entering or leaving interiors.
+[*]Sneak vignette.
+[*]A few [b]extra effects[/b] - cinematic black bars on target lock and camera roll on strafing. They are disabled by default and can be turned on in the settings.
+[*][b]Full Body Awareness tweaks[/b] - if you play with a visible body in first person using the FBA Compatibility folder of [url=https://www.nexusmods.com/morrowind/mods/52596]ReAnimation[/url], these tweaks are applied automatically to make the experience more coherent and prevent some visual clipping.
+[*]All of it is adjustable in Options -> Scripts -> Dynamic Caméra.
+[/list]
+
+[url=https://ko-fi.com/maxyari][img]https://raw.githubusercontent.com/MaxYari/DynamicCameraOpenmw/main/imgs/morrowind_kofi_banner_left_half_bright124.gif[/img][/url][url=https://ko-fi.com/maxyari][img]https://raw.githubusercontent.com/MaxYari/DynamicCameraOpenmw/main/imgs/banner_right.png[/img][/url]
+[url=https://ko-fi.com/maxyari][img]https://raw.githubusercontent.com/MaxYari/DynamicCameraOpenmw/main/imgs/banner_glow.png[/img][/url]
+
+[size=5][b]✩ How to install[/b][/size]
+
+[list]
+[*][b]Requires OpenMW 0.49 or newer.[/b]
+[*]Install and enable [url=https://www.nexusmods.com/morrowind/mods/60256]Max Yari's Script Services (MSS)[/url], it's a required dependency.
+[*]Install this mod [b]with a mod organiser[/b]: download the archive (or this repository as an archive) and drag and drop it into your mod organiser of choice (e.g [url=https://github.com/ModOrganizer2/modorganizer/releases]Mod Organizer 2[/url] on Windows or [url=https://github.com/grazelandsnomad/nerevarine_organizer/releases/tag/v0.70]Nerevarine Organizer[/url] on Linux). [b]Or[/b] [url=https://modding-openmw.com/tips/installing-mods/]read this tutorial[/url] on how to install mods using the launcher or completely manually (it's also very easy).
+[*]Enable [font=Courier New]DynamicCamera.omwscripts[/font] in the "Content Files" tab of the OpenMW launcher.
+[*]Ensure that post processing is enabled: Options -> Video -> Post Processing (in-game) or "Enable post processing" in the "Visuals" tab of the launcher settings. The shader effects don't show without it.
+[*]Set a key bind for target lock in Options -> Scripts -> Dynamic Caméra.
+[/list]
+
+Have fun!
+
+[size=5][b]✩ Known issues[/b][/size]
+
+[list]
+[*]With OpenMW's 360° third-person camera, if a target is locked while your weapon is not drawn, moving around switches between targets. It only happens with the weapon sheathed and the 360° camera. Can be "fixed" by disabling look-based target switching in setting.
+[/list]
+
+[size=5][b]✩ Credit[/b][/size]
+
+[list]
+[*]Thanks to [url=https://www.nexusmods.com/profile/Foxunder/mods]Foxunder[/url] for investigating and fixing rare camera jitters.
+[*][url=https://gitlab.com/fallchildren]fallchildren[/url] for debugging and fixing issues.
+[*]High-speed blur shader by EpochWon.
+[*]Cinematic black bars shader by [url=https://gitlab.com/vtastek/]Vtastek[/url].
+[*]Vignette shader by [url=https://www.nexusmods.com/profile/wazabear/mods]Wazabear[/url].
+[*]Hex DOF (bokeh) shader by [url=https://github.com/wareya]Wareya[/url].
+[*]High-speed wind howling sound by [url=https://nimsound.ru/]Nimlos' Sound[/url].
+[*]Thanks to [url=https://www.nexusmods.com/profile/taitechnic]taitechnic[/url] for helping to improve [url=https://www.nexusmods.com/morrowind/mods/54782]Dynamic Actors[/url] compatibility.
+[*]Thanks to the folks in the OpenMW Discord for name suggestions and overall help and support.
+[/list]
+
+[size=5][b]✩ For developers[/b][/size]
+
+Dynamic Camera exposes a small Lua interface, [font=Courier New]I.DynamicCamera[/font].
+
+[size=4][b]Forcing the tilt effects[/b][/size]
+
+You can force the strafe or look-based tilt to be active even if the corresponding extra setting is disabled (useful for modded dodges, sprints etc.):
+
+[code]local I = require("openmw.interfaces")
+I.DynamicCamera.configOverrides.StrafeRollStrength = 1
+I.DynamicCamera.configOverrides.LookAroundRollStrength = 1
+
+-- And don't forget to set them back to nil when you don't want those features active anymore!
+I.DynamicCamera.configOverrides.StrafeRollStrength = nil
+I.DynamicCamera.configOverrides.LookAroundRollStrength = nil[/code]
+
+[size=4][b]Extra camera yaw/pitch/roll[/b][/size]
+
+If you want to add extra yaw/pitch/roll to the camera in a way that is compatible with this mod and with any other mod using the same interface - Dynamic Camera exposes methods that mirror the corresponding OpenMW Lua camera methods, but let multiple mods provide their own values, which are then summed:
+
+[code]I.DynamicCamera.setExtraYaw(10, "my_mod_id")
+I.DynamicCamera.setExtraPitch(0, "my_mod_id")
+I.DynamicCamera.setExtraRoll(0, "my_mod_id")[/code]
+
+[font=Courier New]"my_mod_id"[/font] is a unique id of your mod, please always use the same id inside your mod whenever you set or change those values.
+
+[size=4][b]Limiting the viewmodel down tilt[/b][/size]
+
+You can limit how far down the first-person viewmodel (hands) may pitch, on top of this mod's own setting. The lowest limit from all mods wins:
+
+[code]I.DynamicCamera.setViewModelPitchLimit(math.rad(50), "my_mod_id") -- radians, positive is down
+I.DynamicCamera.setViewModelPitchLimit(nil, "my_mod_id")          -- clears your limit[/code]
+
+[size=5][b]✩ Generative AI use disclaimer[/b][/size]
+
+ChatGPT was used to help write the original description, and it's likely that it was used for parts of the code too.
