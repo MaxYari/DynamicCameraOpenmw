@@ -35,6 +35,12 @@ _1st-person animations in the video are from [ReAnimation v2](https://www.nexusm
 
 Have fun!
 
+## ✩ ReAnimation and Full Body Awareness
+
+[ReAnimation](https://www.nexusmods.com/morrowind/mods/52596) and [Full Body Awareness](https://www.nexusmods.com/morrowind/mods/56625) are supported. With ReAnimation's FBA Compatibility folder installed, so that your own body is visible in first person, this mod adapts the camera to it: the hands stop short of sinking into your chest when you look down, and the camera eases forward so you see past your chest instead of into your armor's neck opening.
+
+Nothing needs to be set up - the FBA Compatibility folder is detected automatically, and the settings page tells you whether it was found.
+
 ## ✩ Known issues
 
 - With OpenMW's 360° third-person camera, if a target is locked while your weapon is not drawn, moving around switches between targets. It only happens with the weapon sheathed and the 360° camera. Can be "fixed" by disabling look-based target switching in setting.
@@ -53,7 +59,22 @@ Have fun!
 
 ## ✩ For developers
 
-Dynamic Camera exposes a small Lua interface, `I.DynamicCamera`.
+Dynamic Camera exposes a small Lua interface, `I.DynamicCamera`: hand it a take-over of the camera while your mod drives it, force the tilt effects on, add extra yaw/pitch/roll that stacks with other mods, and limit how far down the viewmodel tilts. All of it is documented in the [git repository](https://github.com/MaxYari/DynamicCameraOpenmw#taking-the-camera-over). If you are already reading this on git - just read below.
+
+<!-- nexus-skip-start -->
+### Taking the camera over
+
+If your mod wants to drive the camera itself (a dodge, a cinematic, a custom aim mode), ask Dynamic Camera to step aside. While any mod suspends it, Dynamic Camera stops writing camera and viewmodel rotation completely, so `camera.setYaw`/`setPitch` and the player's own input are yours:
+
+```lua
+I.DynamicCamera.setCameraControlSuspended(true, "my_mod_id")  -- Dynamic Camera lets go of the camera
+I.DynamicCamera.setCameraControlSuspended(false, "my_mod_id") -- and takes it back over
+I.DynamicCamera.isCameraControlSuspended()                    -- true while any mod (including yours) suspends it
+```
+
+Suspending switches off viewmodel inertia, target lock (an active lock is dropped) and the paralysis view clamp. Everything else keeps working, including the extra yaw/pitch/roll below, jump bobbing, strafe roll, the high-speed and cell transition effects and the sneak vignette.
+
+Several mods can suspend at once, so control only returns once every one of them has released it. Always release it with the same id you suspended it with.
 
 ### Forcing the tilt effects
 
@@ -68,6 +89,15 @@ I.DynamicCamera.configOverrides.LookAroundRollStrength = 1
 I.DynamicCamera.configOverrides.StrafeRollStrength = nil
 I.DynamicCamera.configOverrides.LookAroundRollStrength = nil
 ```
+
+The viewmodel inertia can be overridden the same way, if you want to soften or disable just the inertia while Dynamic Camera keeps driving the camera (for a full take-over use the suspend call above):
+
+```lua
+I.DynamicCamera.configOverrides.ViewmodelIntertiaStrength = 0 -- no inertia, hands follow the camera exactly
+I.DynamicCamera.configOverrides.ViewmodelIntertiaStrength = nil -- back to the player's setting
+```
+
+Note that `configOverrides` is one shared table rather than per-mod values, so if two mods override the same one, the last to write it wins.
 
 ### Extra camera yaw/pitch/roll
 
@@ -89,6 +119,7 @@ You can limit how far down the first-person viewmodel (hands) may pitch, on top 
 I.DynamicCamera.setViewModelPitchLimit(math.rad(50), "my_mod_id") -- radians, positive is down
 I.DynamicCamera.setViewModelPitchLimit(nil, "my_mod_id")          -- clears your limit
 ```
+<!-- nexus-skip-end -->
 
 ## ✩ Generative AI use disclaimer
 

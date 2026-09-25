@@ -40,6 +40,12 @@ Meant to be used with the [url=https://www.nexusmods.com/morrowind/mods/56584]Dy
 
 Have fun!
 
+[size=5][b]✩ ReAnimation and Full Body Awareness[/b][/size]
+
+[url=https://www.nexusmods.com/morrowind/mods/52596]ReAnimation[/url] and [url=https://www.nexusmods.com/morrowind/mods/56625]Full Body Awareness[/url] are supported. With ReAnimation's FBA Compatibility folder installed, so that your own body is visible in first person, this mod adapts the camera to it: the hands stop short of sinking into your chest when you look down, and the camera eases forward so you see past your chest instead of into your armor's neck opening.
+
+Nothing needs to be set up - the FBA Compatibility folder is detected automatically, and the settings page tells you whether it was found.
+
 [size=5][b]✩ Known issues[/b][/size]
 
 [list]
@@ -62,36 +68,7 @@ Have fun!
 
 [size=5][b]✩ For developers[/b][/size]
 
-Dynamic Camera exposes a small Lua interface, [font=Courier New]I.DynamicCamera[/font].
-
-[size=4][b]Forcing the tilt effects[/b][/size]
-
-You can force the strafe or look-based tilt to be active even if the corresponding extra setting is disabled (useful for modded dodges, sprints etc.):
-
-[code]local I = require("openmw.interfaces")
-I.DynamicCamera.configOverrides.StrafeRollStrength = 1
-I.DynamicCamera.configOverrides.LookAroundRollStrength = 1
-
--- And don't forget to set them back to nil when you don't want those features active anymore!
-I.DynamicCamera.configOverrides.StrafeRollStrength = nil
-I.DynamicCamera.configOverrides.LookAroundRollStrength = nil[/code]
-
-[size=4][b]Extra camera yaw/pitch/roll[/b][/size]
-
-If you want to add extra yaw/pitch/roll to the camera in a way that is compatible with this mod and with any other mod using the same interface - Dynamic Camera exposes methods that mirror the corresponding OpenMW Lua camera methods, but let multiple mods provide their own values, which are then summed:
-
-[code]I.DynamicCamera.setExtraYaw(10, "my_mod_id")
-I.DynamicCamera.setExtraPitch(0, "my_mod_id")
-I.DynamicCamera.setExtraRoll(0, "my_mod_id")[/code]
-
-[font=Courier New]"my_mod_id"[/font] is a unique id of your mod, please always use the same id inside your mod whenever you set or change those values.
-
-[size=4][b]Limiting the viewmodel down tilt[/b][/size]
-
-You can limit how far down the first-person viewmodel (hands) may pitch, on top of this mod's own setting. The lowest limit from all mods wins:
-
-[code]I.DynamicCamera.setViewModelPitchLimit(math.rad(50), "my_mod_id") -- radians, positive is down
-I.DynamicCamera.setViewModelPitchLimit(nil, "my_mod_id")          -- clears your limit[/code]
+Dynamic Camera exposes a small Lua interface, [font=Courier New]I.DynamicCamera[/font]: hand it a take-over of the camera while your mod drives it, force the tilt effects on, add extra yaw/pitch/roll that stacks with other mods, and limit how far down the viewmodel tilts. All of it is documented in the [url=https://github.com/MaxYari/DynamicCameraOpenmw#taking-the-camera-over]git repository[/url]. If you are already reading this on git - just read below.
 
 [size=5][b]✩ Generative AI use disclaimer[/b][/size]
 

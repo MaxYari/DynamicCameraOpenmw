@@ -75,6 +75,13 @@ fragment vignette {
         dist = pow(clamp(dist, 0.0, 1.0), vec2(radius));
 
         float amount = pow(clamp(1.0 - dot(dist, dist), 0.0, 1.0), uFeather * 5.0);
+
+        // Bottom half only: the vignette fades out from the middle of the screen upward, so it
+        // frames the bottom corners and leaves the top of the view clear. An amount of 1 is no
+        // darkening at all, so the fade goes towards 1.
+        float bottomOnly = 1.0 - smoothstep(0.15, 0.5, omw_TexCoord.y);
+        amount = mix(1.0, amount, bottomOnly);
+
         omw_FragColor = vec4(omw_GetLastShader(omw_TexCoord).rgb * mix(uColor, vec3(1.0), amount), 1.0);
     }
 }

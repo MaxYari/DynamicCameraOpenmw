@@ -139,7 +139,7 @@ I.Settings.registerGroup {
         {
             key = "SneakVignetteOpacity",
             renderer = "number",
-            default = 35,
+            default = 40,
             argument = {
                 min = 0,
                 max = 100

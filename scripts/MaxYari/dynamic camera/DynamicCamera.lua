@@ -1,5 +1,5 @@
 -- Mod version, published to Nexus by .github/workflows/nexus-release.yml (the first `version = ...` in this file)
-local VERSION = "2.6"
+local VERSION = "2.7"
 
 local mp = "scripts/MaxYari/dynamic camera/"
 local sp = "scripts\\MaxYari\\dynamic camera\\sounds\\"
@@ -234,16 +234,34 @@ local function setViewModelPitchLimit(value, modId)
     viewModelPitchLimitMods[modId] = value
 end
 
+-- Mods (mod-id keyed) that want this mod to stop driving the camera, so they can drive it themselves.
+local cameraControlSuspendMods = {}
+
+local function isCameraControlSuspended()
+    return next(cameraControlSuspendMods) ~= nil
+end
+
+-- While any mod suspends it, this mod stops writing camera and view model rotation entirely
+-- (no view model inertia, no target lock, no paralysis clamp) and leaves the camera to the engine
+-- and to you. Everything applied outside of that keeps running: the extra pitch/yaw/roll above,
+-- jump bobbing, strafe roll, the speed and cell transition effects and the sneak vignette.
+local function setCameraControlSuspended(suspended, modId)
+    if not modId then error("setCameraControlSuspended: modId is required") end
+    cameraControlSuspendMods[modId] = suspended or nil
+end
+
 -- Interface
 local interface = {
-    version = 1.25,
+    version = 1.3,
     shaders = shaderUtils.instances,
     configOverrides = {},
     camSpeedMult = 1.0,
     setExtraPitch = setExtraPitch,
     setExtraYaw = setExtraYaw,
     setExtraRoll = setExtraRoll,
-    setViewModelPitchLimit = setViewModelPitchLimit
+    setViewModelPitchLimit = setViewModelPitchLimit,
+    setCameraControlSuspended = setCameraControlSuspended,
+    isCameraControlSuspended = isCameraControlSuspended
 }
 
 -- TO DO: Later - maybe make targeting height adjustable?
@@ -602,6 +620,16 @@ local lastWrittenPitchChange = nil
 local MaxModelDelta = 1.0
 local MaxCameraPitch = 1.55
 
+-- Eases the target lock's bokeh and black bars back off, for when no target is locked and for when
+-- another mod takes the camera over while one is (otherwise they would stay frozen on screen).
+local function easeTargetLockEffectsOff(dt)
+    if I.DynamicReticle then
+        I.DynamicReticle.setReticleScreenPos(CenterVector)
+    end
+    hexDofShader.u.uAperture = gutils.lerp(hexDofShader.u.uAperture, 0, gutils.dtForLerp(dt, 5))
+    blackBarsShader.u.ratio = gutils.lerp(blackBarsShader.u.ratio, 0, gutils.dtForLerp(dt, 5))
+end
+
 local function releaseCameraControl()
     lastWrittenYawChange = nil
     lastWrittenPitchChange = nil
@@ -629,7 +657,7 @@ local function onFrame(dt)
     local camVelocity = (newCameraYaw - cameraYaw) / dt / 100
     local mouseVelocity = util.vector2(mouseDeltaYaw, mouseDeltaPitch) / prevDt
 
-    if not isInUI and not next(badAnimations) and not isDowned() then
+    if not isInUI and not next(badAnimations) and not isDowned() and not isCameraControlSuspended() then
         -- Camera lock ----------------------------------------
         -------------------------------------------------------
         CamLockTarget = updateTargetLock(mouseVelocity, CamLockTarget, dt)
@@ -657,11 +685,7 @@ local function onFrame(dt)
             hexDofShader.u.uAperture = gutils.lerp(hexDofShader.u.uAperture, 0.2, gutils.dtForLerp(dt, 5))
             blackBarsShader.u.ratio = gutils.lerp(blackBarsShader.u.ratio, BlackBarsRatio, gutils.dtForLerp(dt, 5))
         else
-            if I.DynamicReticle then
-                I.DynamicReticle.setReticleScreenPos(CenterVector)
-            end
-            hexDofShader.u.uAperture = gutils.lerp(hexDofShader.u.uAperture, 0, gutils.dtForLerp(dt, 5))
-            blackBarsShader.u.ratio = gutils.lerp(blackBarsShader.u.ratio, 0, gutils.dtForLerp(dt, 5))
+            easeTargetLockEffectsOff(dt)
         end
 
         -- Limit view angles if paralyzed
@@ -690,7 +714,8 @@ local function onFrame(dt)
             -- Offsetting view model yaw from camera yaw based on rotation velocity
             cameraVelSampler:sample(camVelocity)
             -- cameraVelSamplerShort:sample(camVelocity)
-            local newViewModelYaw = cameraYaw - cameraVelSampler.mean * ViewmodelIntertiaStrength
+            local inertiaStrength = interface.configOverrides.ViewmodelIntertiaStrength or ViewmodelIntertiaStrength
+            local newViewModelYaw = cameraYaw - cameraVelSampler.mean * inertiaStrength
 
             -- View model yaw can only be set by providing a delta value, so calculating such
             local deltaModelYaw = util.normalizeAngle(newViewModelYaw - omwself.rotation:getYaw())
@@ -723,6 +748,12 @@ local function onFrame(dt)
         cameraPitch = camera.getPitch()
         cameraYaw = camera.getYaw()
         releaseCameraControl()
+        -- Another mod drives the camera now: drop the lock (it would snap the view back on release)
+        -- and ease its effects off. Menus and knockdowns keep theirs, they are over in a moment.
+        if isCameraControlSuspended() then
+            CamLockTarget = nil
+            easeTargetLockEffectsOff(dt)
+        end
     end
 
     _CamVelocity = camVelocity
