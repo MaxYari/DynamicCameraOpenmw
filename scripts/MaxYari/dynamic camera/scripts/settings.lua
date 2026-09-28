@@ -8,6 +8,11 @@ local HighSpeedEffectsOpts = {
     Off = "Off"
 }
 
+local SneakVignetteStyleOpts = {
+    Bottom = "Bottom only",
+    Full = "Full"
+}
+
 input.registerTrigger {
     key = 'LockTarget',    
     l10n = 'FPViewDynamics'
@@ -146,6 +151,17 @@ I.Settings.registerGroup {
             },
             name = "Sneak Vignette Opacity",
             description = "In 0 - 100 range"
+        },
+        {
+            key = 'SneakVignetteStyle',
+            renderer = 'select',
+            default = SneakVignetteStyleOpts.Bottom,
+            argument = {
+                l10n = 'FPViewDynamics',
+                items = { SneakVignetteStyleOpts.Bottom, SneakVignetteStyleOpts.Full },
+            },
+            name = 'Sneak Vignette Style',
+            description = "Bottom only darkens the lower half of the screen and leaves the top of the view clear. Full darkens all four corners."
         }
     },
 }
@@ -255,5 +271,6 @@ I.Settings.registerGroup {
 }
 
 return {
-    HighSpeedEffectsOpts = HighSpeedEffectsOpts
+    HighSpeedEffectsOpts = HighSpeedEffectsOpts,
+    SneakVignetteStyleOpts = SneakVignetteStyleOpts
 }

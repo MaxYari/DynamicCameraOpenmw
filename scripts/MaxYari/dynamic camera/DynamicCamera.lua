@@ -69,6 +69,7 @@ local SpeedBlurStrength = get100Setting(visualSettings, "SpeedBlurStrength")
 local DofEffects = visualSettings:get("DofEffects")
 local CellTransitionDuration = visualSettings:get("CellTransitionDuration")
 local SneakVignetteOpacity = get100Setting(visualSettings, "SneakVignetteOpacity")
+local SneakVignetteStyle = visualSettings:get("SneakVignetteStyle")
 local BlackBarsRatio = visualExtraSettings:get("BlackBarsRatio")
 local StrafeRollStrength = get100Setting(visualExtraSettings, "StrafeRollStrength")
 local LookAroundRollStrength = get100Setting(visualExtraSettings, "LookAroundRollStrength")
@@ -92,7 +93,8 @@ end
 readFbaSettings()
 fbaSettings:subscribe(async:callback(readFbaSettings))
 
-visualSettings:subscribe(async:callback(function(val)
+-- Extra Visuals (roll strengths, black bars) is its own section, so it needs its own subscription.
+local function readVisualSettings()
     ViewmodelIntertiaStrength = get100Setting(visualSettings, "ViewmodelIntertiaStrength")
     HighSpeedEffects = visualSettings:get("HighSpeedEffects")
     HighSpeedEffectStart = visualSettings:get("HighSpeedEffectStart")
@@ -100,10 +102,13 @@ visualSettings:subscribe(async:callback(function(val)
     DofEffects = visualSettings:get("DofEffects")
     CellTransitionDuration = visualSettings:get("CellTransitionDuration")
     SneakVignetteOpacity = get100Setting(visualSettings, "SneakVignetteOpacity")
+    SneakVignetteStyle = visualSettings:get("SneakVignetteStyle")
     BlackBarsRatio = visualExtraSettings:get("BlackBarsRatio")
     StrafeRollStrength = get100Setting(visualExtraSettings, "StrafeRollStrength")
     LookAroundRollStrength = get100Setting(visualExtraSettings, "LookAroundRollStrength")
-end))
+end
+visualSettings:subscribe(async:callback(readVisualSettings))
+visualExtraSettings:subscribe(async:callback(readVisualSettings))
 
 
 -- Initialize shaders
@@ -901,6 +906,7 @@ local function onUpdate(dt)
 
     -- Sneaking vignette -------------------------------
     ----------------------------------------------------
+    sneakVigShader.u.uBottomOnly = SneakVignetteStyle == settings.SneakVignetteStyleOpts.Full and 0 or 1
     if omwself.controls.sneak then
         sneakVigShader.u.uMidPoint = gutils.lerp(sneakVigShader.u.uMidPoint, 1 - SneakVignetteOpacity,
             gutils.dtForLerp(dt, 5))
