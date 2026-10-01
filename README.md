@@ -59,7 +59,7 @@ Nothing needs to be set up - the FBA Compatibility folder is detected automatica
 
 ## ✩ For developers
 
-Dynamic Camera exposes a small Lua interface, `I.DynamicCamera`: hand it a take-over of the camera while your mod drives it, force the tilt effects on, add extra yaw/pitch/roll that stacks with other mods, and limit how far down the viewmodel tilts. All of it is documented in the [git repository](https://github.com/MaxYari/DynamicCameraOpenmw#taking-the-camera-over). If you are already reading this on git - just read below.
+Dynamic Camera exposes a small Lua interface, `I.DynamicCamera`: hand it a take-over of the camera while your mod drives it, force the tilt effects on, add extra yaw/pitch/roll that stacks with other mods, limit how far down the viewmodel tilts, and slow the mouse look. All of it is documented in the [git repository](https://github.com/MaxYari/DynamicCameraOpenmw#taking-the-camera-over). If you are already reading this on git - just read below.
 
 <!-- nexus-skip-start -->
 ### Taking the camera over
@@ -119,6 +119,17 @@ You can limit how far down the first-person viewmodel (hands) may pitch, on top 
 I.DynamicCamera.setViewModelPitchLimit(math.rad(50), "my_mod_id") -- radians, positive is down
 I.DynamicCamera.setViewModelPitchLimit(nil, "my_mod_id")          -- clears your limit
 ```
+
+### Slowing the mouse look
+
+You can scale how far the mouse turns the camera, for example to let the view drift only slightly while your mod uses the mouse for something else. Multipliers from all mods are multiplied together:
+
+```lua
+I.DynamicCamera.setLookSpeedMult(0.1, "my_mod_id") -- the camera follows the mouse at 10%
+I.DynamicCamera.setLookSpeedMult(nil, "my_mod_id") -- clears your multiplier
+```
+
+This applies while Dynamic Camera drives the camera: in first person, and in third person with a target locked. Elsewhere (third person otherwise, or while suspended) the engine turns the camera, so scale the player's `self.controls.yawChange` / `pitchChange` yourself there.
 <!-- nexus-skip-end -->
 
 ## ✩ Generative AI use disclaimer

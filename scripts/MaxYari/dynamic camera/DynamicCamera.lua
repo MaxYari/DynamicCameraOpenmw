@@ -255,9 +255,24 @@ local function setCameraControlSuspended(suspended, modId)
     cameraControlSuspendMods[modId] = suspended or nil
 end
 
+-- Mods (mod-id keyed) scaling how far the mouse turns the camera while this mod drives it, all
+-- multiplied together (the product is kept, so the camera reads one number per frame). Where this
+-- mod doesn't drive the camera (third person without a target lock, or while suspended), the engine
+-- turns it, and a mod that wants it slower there scales the player's yaw/pitch controls itself.
+local lookSpeedMods = {}
+local lookSpeedMult = 1
+
+-- nil clears this mod's multiplier.
+local function setLookSpeedMult(value, modId)
+    if not modId then error("setLookSpeedMult: modId is required") end
+    lookSpeedMods[modId] = value
+    lookSpeedMult = 1
+    for _, mult in pairs(lookSpeedMods) do lookSpeedMult = lookSpeedMult * mult end
+end
+
 -- Interface
 local interface = {
-    version = 1.3,
+    version = 1.4,
     shaders = shaderUtils.instances,
     configOverrides = {},
     camSpeedMult = 1.0,
@@ -266,7 +281,8 @@ local interface = {
     setExtraRoll = setExtraRoll,
     setViewModelPitchLimit = setViewModelPitchLimit,
     setCameraControlSuspended = setCameraControlSuspended,
-    isCameraControlSuspended = isCameraControlSuspended
+    isCameraControlSuspended = isCameraControlSuspended,
+    setLookSpeedMult = setLookSpeedMult
 }
 
 -- TO DO: Later - maybe make targeting height adjustable?
@@ -653,8 +669,8 @@ local function onFrame(dt)
     if lastWrittenYawChange and rawYawChange == lastWrittenYawChange then rawYawChange = 0 end
     if lastWrittenPitchChange and rawPitchChange == lastWrittenPitchChange then rawPitchChange = 0 end
 
-    local mouseDeltaYaw = rawYawChange * interface.camSpeedMult
-    local mouseDeltaPitch = rawPitchChange * interface.camSpeedMult
+    local mouseDeltaYaw = rawYawChange * interface.camSpeedMult * lookSpeedMult
+    local mouseDeltaPitch = rawPitchChange * interface.camSpeedMult * lookSpeedMult
 
     local newCameraYaw = cameraYaw + mouseDeltaYaw
     local newCameraPitch = util.clamp(cameraPitch + mouseDeltaPitch, -MaxCameraPitch, MaxCameraPitch)
