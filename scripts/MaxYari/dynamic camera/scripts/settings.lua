@@ -206,7 +206,7 @@ I.Settings.registerGroup {
         {
             key = "StrafeRollStrength",
             renderer = "number",
-            default = 0,
+            default = 50,
             argument = {
                 
             },
