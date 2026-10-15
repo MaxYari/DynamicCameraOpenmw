@@ -404,6 +404,53 @@ local function testLOS(actor)
     return castResult.hitObject == actor
 end
 
+-- Score of an actor as a lock-on target, lower is better. nil if it can't be targeted.
+local function targetScore(actor, camPos, mouseDirection, currentTarget)
+    if actor == omwself.object or actor == currentTarget then return end
+
+    local actorPos = actor.position
+    local distanceToSelf = (actorPos - omwself.position):length()
+
+    if distanceToSelf > maxTargetDistance then return end
+
+    local lockPos = actorLockPos(actor)
+
+    if not lockPos then return end
+
+    local toActor = (lockPos - camPos):normalize()
+    local camDir = camera.viewportToWorldVector(util.vector2(0.5, 0.5))
+
+    local lookDot = toActor:dot(camDir)
+    --print("CamDir",camDir,"toActor",toActor, "lookDot", lookDot)
+
+    --print("2",actor)
+
+    if lookDot < 0 then return end
+
+    --print("3",actor)
+
+    if not actor:isValid() then return end
+
+    local mouseDot = 1
+    if mouseDirection then
+        local toMouseVec = camera.viewportToWorldVector(util.vector2(0.5, 0.5) + mouseDirection)
+        local worldMouseDir = toMouseVec - camDir
+        mouseDot = toActor:dot(worldMouseDir)
+    end
+
+    --print("4",actor)
+
+    if mouseDot < 0 then return end
+    if not testLOS(actor) then return end
+
+    --print("5",actor)
+    -- Combine distance and direction into a score
+    if currentTarget then
+        return (actorPos - currentTarget.position):length()
+    end
+    return -lookDot
+end
+
 local function findBestTarget(mouseDirection, currentTarget)
     local camPos = camera.getPosition()
     local bestTarget = nil
@@ -412,59 +459,13 @@ local function findBestTarget(mouseDirection, currentTarget)
     --print(mouseDirection, currentTarget)
 
     for _, actor in ipairs(nearby.actors) do
-        if actor == omwself.object or actor == currentTarget then goto continue end
-
-        local actorPos = actor.position       
-        local distanceToSelf = (actorPos - omwself.position):length()
-
-        if distanceToSelf > maxTargetDistance then goto continue end
-
-        local lockPos = actorLockPos(actor)
-        
-        if not lockPos then goto continue end
-
-        local toActor = (lockPos - camPos):normalize()
-        local camDir = camera.viewportToWorldVector(util.vector2(0.5, 0.5))
-
-        local lookDot = toActor:dot(camDir)
-        --print("CamDir",camDir,"toActor",toActor, "lookDot", lookDot)
-
-        --print("2",actor)
-
-        if lookDot < 0 then goto continue end
-
-        --print("3",actor)
-
-        if not actor:isValid() then goto continue end
-
-        local mouseDot = 1
-        if mouseDirection then
-            local toMouseVec = camera.viewportToWorldVector(util.vector2(0.5, 0.5) + mouseDirection)
-            local worldMouseDir = toMouseVec - camDir
-            mouseDot = toActor:dot(worldMouseDir)
-        end
-
-        --print("4",actor)
-
-        if mouseDot < 0 then goto continue end
-        if not testLOS(actor) then goto continue end
-
-        --print("5",actor)
-        -- Combine distance and direction into a score
-        local score
-        if currentTarget then
-            score = (actorPos - currentTarget.position):length()
-        else
-            score = -lookDot
-        end
-        --print(score, actor, lookDot, currentTarget)
-        if score < bestScore then
+        local score = targetScore(actor, camPos, mouseDirection, currentTarget)
+        --print(score, actor, currentTarget)
+        if score and score < bestScore then
             bestScore = score
             bestTarget = actor
             --print("Best target",actor)
         end
-
-        ::continue::
     end
 
     return bestTarget
